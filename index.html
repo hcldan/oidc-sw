@@ -1,0 +1,125 @@
+<html>
+  <head>
+    <title>OIDC test</title>
+  </head>
+  <body>
+    <div class="greeting" style="display: none">
+      <h1>Hello, <span class="name"></span>.</h1>
+      ID Token: <pre id="id-token"></pre><br>
+      Access Token: <pre id="access-token"></pre><br>
+      Refresh Token: <pre id="refresh-token"></pre><br>
+      <button id="refresh">refresh</button>
+    </div>
+    <div class="login">
+      <button id="login">login</button>
+      <button id="unreg">unregister sw</button>
+      <button id="window">popup login</button>
+      <button id="iframe">iframe login</button>
+    </div>
+
+    <iframe src="about:blank" frameborder="1"></iframe>
+
+    <script type="module">
+      import pkceChallenge from 'https://unpkg.com/pkce-challenge@4.1.0/dist/index.browser.js';
+      const { code_verifier, code_challenge } = await pkceChallenge(64);
+
+      // Edit these for your environment  ---v
+      const IDP_HOST = 'oidc.example.com';
+      const client_id = 'OIDC_TEST';
+      // Edit these for your environment  ---^
+
+
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: '/', type: 'module', });
+      if (!navigator.serviceWorker.controller) {
+        window.location.reload();
+      }
+
+      navigator.serviceWorker.onmessage = (event) => {
+        const { tokens, id, access } = event.data;
+
+        document.querySelector('span.name').textContent = id[1]?.sub || "whoever you are";
+        document.querySelector('#id-token').textContent = JSON.stringify(id, null, 2);
+        document.querySelector('#access-token').textContent = JSON.stringify(access, null, 2);
+        document.querySelector('#refresh-token').textContent = tokens.refresh_token;
+
+        document.querySelector('.greeting').style.display = 'block';
+      };
+
+      document.querySelector('#refresh').addEventListener('click', () => {
+        navigator.serviceWorker.controller.postMessage('refresh');
+      });
+      document.querySelector('button#login').addEventListener('click', (event) => {
+        event.target.style.display = 'none';
+        window.open('/login', '_blank');
+      });
+
+      document.querySelector('button#unreg').addEventListener('click', async (event) => {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        let count = 0;
+        registrations.forEach((registration) => {
+          count++;
+          registration.unregister();
+        });
+        console.log(`unregistered ${count} service workers.`);
+      });
+
+      const redirect_uri = `${window.location.href.substring(0, window.location.href.lastIndexOf('/'))}/callback`;
+
+      document.querySelector('button#window').addEventListener('click', async (event) => {
+        const authorizationUrl = await getAuthUrl();
+
+        const spyon = window.open(authorizationUrl, '_blank');
+        let count = 0;
+        const check = () => {
+          count += 1;
+          if (count < 20000) {
+            setTimeout(check, 0);
+          }
+          try {
+            if (spyon.location.href.includes('code=')) {
+              window.alert("code found!")
+            }
+          } catch (e) { }
+        };
+        check();
+      });
+
+      document.querySelector('button#iframe').addEventListener('click', async (event) => {
+        const authorizationUrl = await getAuthUrl();
+
+        const spyon = document.querySelector('iframe').src = authorizationUrl;
+        let count = 0;
+        const check = () => {
+          count += 1;
+          if (count < 20000) {
+            setTimeout(check, 0);
+          }
+          try {
+            if (document.querySelector('iframe').src.includes('code=')) {
+              window.alert("code found!")
+            }
+            if (console.log(document.querySelector('iframe').contentWindow.location.href).includes('code=')) {
+              window.alert("code found!")
+            };
+          } catch (e) {}
+        };
+        check();
+      });
+
+      async function getAuthUrl() {
+        const response = await fetch(`https://${IDP_HOST}/auth/protocol/oidc/.well-known/openid-configuration`);
+        const domino = await response.json();
+        console.log('Discovered issuer %s %O', domino.issuer, domino);
+
+        return new URL(`${domino.authorization_endpoint}?${new URLSearchParams({
+          client_id,
+          response_type: 'code',
+          scope: 'openid email',
+          redirect_uri,
+          code_challenge,
+          code_challenge_method: "S256",
+        })}`).toString();
+      }
+    </script>
+  </body>
+</html>

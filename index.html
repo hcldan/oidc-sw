@@ -87,7 +87,7 @@
       document.querySelector('button#iframe').addEventListener('click', async (event) => {
         const authorizationUrl = await getAuthUrl();
 
-        const spyon = document.querySelector('iframe').src = authorizationUrl;
+        document.querySelector('iframe').src = authorizationUrl;
         let count = 0;
         const check = () => {
           count += 1;
@@ -98,7 +98,7 @@
             if (document.querySelector('iframe').src.includes('code=')) {
               window.alert("code found!")
             }
-            if (console.log(document.querySelector('iframe').contentWindow.location.href).includes('code=')) {
+            if (document.querySelector('iframe').contentWindow.location.href.includes('code=')) {
               window.alert("code found!")
             };
           } catch (e) {}
